@@ -29,6 +29,7 @@ Copy `appsettings.example.json` to `appsettings.json` or use environment variabl
   "Discord": {
     "BotToken": "${DISCORD_BOT_TOKEN}",
     "AllowedChannels": [],
+    "AllowDirectMessages": true,
     "RequireMentionOutsideThreads": true
   },
   "Agent": {
@@ -54,6 +55,8 @@ Then mention the bot in an allowed channel:
 ```
 
 Messages posted inside a Discord thread continue on that thread's ACP session without requiring another mention.
+
+Direct messages are supported when `Discord:AllowDirectMessages` is `true`. DMs do not create threads because Discord does not support threads in DM channels; the DM channel itself is used as the ACP session key and does not require mentioning the bot.
 
 ## Tests
 

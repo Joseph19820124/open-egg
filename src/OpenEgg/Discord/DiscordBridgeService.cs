@@ -100,10 +100,11 @@ public sealed partial class DiscordBridgeService : BackgroundService
         }
 
         var inThread = message.Channel is SocketThreadChannel;
+        var inDirectMessage = message.Channel is IDMChannel;
         var mentioned = _client.CurrentUser is not null &&
             message.MentionedUsers.Any(user => user.Id == _client.CurrentUser.Id);
 
-        if (_options.RequireMentionOutsideThreads && !inThread && !mentioned)
+        if (_options.RequireMentionOutsideThreads && !inThread && !inDirectMessage && !mentioned)
         {
             return;
         }
@@ -262,6 +263,11 @@ public sealed partial class DiscordBridgeService : BackgroundService
 
     private bool IsAllowedChannel(SocketUserMessage message)
     {
+        if (message.Channel is IDMChannel)
+        {
+            return _options.AllowDirectMessages;
+        }
+
         if (_options.AllowedChannels.Count == 0)
         {
             return true;
@@ -322,6 +328,8 @@ public sealed partial class DiscordBridgeService : BackgroundService
         var title = string.Concat(chars);
         return title.Length < cleaned.Length ? $"{title}..." : title;
     }
+
+    public static bool ShouldProcessDirectMessage(bool allowDirectMessages) => allowDirectMessages;
 
     private static bool IsThreadAlreadyExistsError(Exception exception)
     {

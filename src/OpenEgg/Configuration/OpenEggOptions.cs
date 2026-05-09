@@ -6,6 +6,8 @@ public sealed class DiscordOptions
 
     public List<ulong> AllowedChannels { get; set; } = [];
 
+    public bool AllowDirectMessages { get; set; } = true;
+
     public bool RequireMentionOutsideThreads { get; set; } = true;
 
     public double ProgressEditIntervalSeconds { get; set; } = 1.5;

@@ -24,4 +24,11 @@ public sealed class DiscordBridgeServiceTests
     {
         Assert.Equal("OpenEgg", DiscordBridgeService.ShortenThreadName("<@123>"));
     }
+
+    [Fact]
+    public void DirectMessageProcessingFollowsExplicitToggle()
+    {
+        Assert.True(DiscordBridgeService.ShouldProcessDirectMessage(allowDirectMessages: true));
+        Assert.False(DiscordBridgeService.ShouldProcessDirectMessage(allowDirectMessages: false));
+    }
 }
