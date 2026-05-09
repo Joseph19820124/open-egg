@@ -114,17 +114,18 @@ public sealed partial class DiscordBridgeService : BackgroundService
             return;
         }
 
-        var sessionKey = message.Channel.Id.ToString();
+        var targetChannel = await GetOrCreateConversationChannelAsync(message, content);
+        var sessionKey = targetChannel.Id.ToString();
         var sessionLock = _sessionLocks.GetOrAdd(sessionKey, _ => new SemaphoreSlim(1, 1));
         await sessionLock.WaitAsync();
         try
         {
-            await HandlePromptAsync(message, sessionKey, content);
+            await HandlePromptAsync(message, targetChannel, sessionKey, content);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to process Discord message {MessageId}.", message.Id);
-            await message.Channel.SendMessageAsync($"OpenEgg failed: `{ex.Message}`");
+            await targetChannel.SendMessageAsync($"OpenEgg failed: `{ex.Message}`");
         }
         finally
         {
@@ -132,14 +133,18 @@ public sealed partial class DiscordBridgeService : BackgroundService
         }
     }
 
-    private async Task HandlePromptAsync(SocketUserMessage message, string sessionKey, string content)
+    private async Task HandlePromptAsync(
+        SocketUserMessage message,
+        IMessageChannel targetChannel,
+        string sessionKey,
+        string content)
     {
-        var progress = await message.Channel.SendMessageAsync("OpenEgg received the request. Starting Codex ACP...");
+        var progress = await targetChannel.SendMessageAsync("OpenEgg received the request. Starting Codex ACP...");
         var prompt = PromptBuilder.WithSenderContext(
             content,
             message.Author.Id.ToString(),
             message.Author.Username,
-            message.Channel.Id.ToString(),
+            targetChannel.Id.ToString(),
             sessionKey,
             message.Id.ToString());
 
@@ -178,7 +183,7 @@ public sealed partial class DiscordBridgeService : BackgroundService
             }
         }
 
-        await SendFinalAsync(message.Channel, progress, tools.Values, text.ToString());
+        await SendFinalAsync(targetChannel, progress, tools.Values, text.ToString());
     }
 
     private async Task EditProgressAsync(IUserMessage progress, IEnumerable<string> tools, string text, bool final)
@@ -189,7 +194,7 @@ public sealed partial class DiscordBridgeService : BackgroundService
     }
 
     private async Task SendFinalAsync(
-        ISocketMessageChannel channel,
+        IMessageChannel channel,
         IUserMessage progress,
         IEnumerable<string> tools,
         string text)
@@ -208,6 +213,50 @@ public sealed partial class DiscordBridgeService : BackgroundService
         foreach (var chunk in chunks.Skip(1))
         {
             await channel.SendMessageAsync(chunk);
+        }
+    }
+
+    private async Task<IMessageChannel> GetOrCreateConversationChannelAsync(SocketUserMessage message, string content)
+    {
+        if (message.Channel is SocketThreadChannel)
+        {
+            return message.Channel;
+        }
+
+        if (message.Channel is not ITextChannel parentChannel)
+        {
+            return message.Channel;
+        }
+
+        var title = ShortenThreadName(content);
+        try
+        {
+            var thread = await parentChannel.CreateThreadAsync(
+                title,
+                ThreadType.PublicThread,
+                ThreadArchiveDuration.OneDay,
+                message);
+
+            _logger.LogInformation(
+                "Created Discord thread {ThreadId} from message {MessageId}.",
+                thread.Id,
+                message.Id);
+
+            return thread;
+        }
+        catch (Exception ex) when (IsThreadAlreadyExistsError(ex))
+        {
+            var refreshed = await message.Channel.GetMessageAsync(message.Id);
+            if (refreshed?.Thread is not null)
+            {
+                _logger.LogInformation(
+                    "Using existing Discord thread {ThreadId} from message {MessageId}.",
+                    refreshed.Thread.Id,
+                    message.Id);
+                return refreshed.Thread;
+            }
+
+            throw;
         }
     }
 
@@ -260,6 +309,27 @@ public sealed partial class DiscordBridgeService : BackgroundService
         return MentionRegex(currentUserId.Value).Replace(content, string.Empty).Trim();
     }
 
+    public static string ShortenThreadName(string prompt)
+    {
+        var cleaned = MentionLikeRegex().Replace(prompt, string.Empty).Trim();
+        cleaned = GitHubIssueOrPullRegex().Replace(cleaned, "$1#$3");
+        if (string.IsNullOrWhiteSpace(cleaned))
+        {
+            return "OpenEgg";
+        }
+
+        var chars = cleaned.EnumerateRunes().Take(40).ToArray();
+        var title = string.Concat(chars);
+        return title.Length < cleaned.Length ? $"{title}..." : title;
+    }
+
+    private static bool IsThreadAlreadyExistsError(Exception exception)
+    {
+        var message = exception.ToString();
+        return message.Contains("160004", StringComparison.Ordinal) ||
+            message.Contains("already been created", StringComparison.OrdinalIgnoreCase);
+    }
+
     private Task LogDiscordAsync(LogMessage message)
     {
         var level = message.Severity switch
@@ -281,6 +351,12 @@ public sealed partial class DiscordBridgeService : BackgroundService
     {
         return new Regex($@"<@!?{userId}>", RegexOptions.Compiled);
     }
+
+    [GeneratedRegex(@"<@!?\d+>|<@&\d+>", RegexOptions.Compiled)]
+    private static partial Regex MentionLikeRegex();
+
+    [GeneratedRegex(@"https?://github\.com/([^/\s]+/[^/\s]+)/(issues|pull)/(\d+)", RegexOptions.Compiled)]
+    private static partial Regex GitHubIssueOrPullRegex();
 
     private static string ExpandEnvironment(string value)
     {
