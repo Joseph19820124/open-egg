@@ -37,6 +37,11 @@ public sealed partial class DiscordBridgeService : BackgroundService
         var token = ExpandEnvironment(_options.BotToken);
         if (string.IsNullOrWhiteSpace(token))
         {
+            token = Environment.GetEnvironmentVariable("DISCORD_BOT_TOKEN") ?? string.Empty;
+        }
+
+        if (string.IsNullOrWhiteSpace(token))
+        {
             throw new InvalidOperationException("Discord:BotToken is required. Set it in appsettings or DISCORD_BOT_TOKEN.");
         }
 
