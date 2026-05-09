@@ -178,8 +178,7 @@ public sealed partial class DiscordBridgeService : BackgroundService
             }
         }
 
-        await EditProgressAsync(progress, tools.Values, text.ToString(), final: true);
-        await SendRemainderAsync(message.Channel, progress, text.ToString());
+        await SendFinalAsync(message.Channel, progress, tools.Values, text.ToString());
     }
 
     private async Task EditProgressAsync(IUserMessage progress, IEnumerable<string> tools, string text, bool final)
@@ -189,12 +188,20 @@ public sealed partial class DiscordBridgeService : BackgroundService
         await progress.ModifyAsync(properties => properties.Content = chunks[0]);
     }
 
-    private async Task SendRemainderAsync(ISocketMessageChannel channel, IUserMessage progress, string text)
+    private async Task SendFinalAsync(
+        ISocketMessageChannel channel,
+        IUserMessage progress,
+        IEnumerable<string> tools,
+        string text)
     {
-        var chunks = TextChunker.Chunk(text, _options.MessageChunkLimit);
+        var body = BuildDisplay(tools, text, final: true);
+        var chunks = TextChunker.Chunk(body, _options.MessageChunkLimit)
+            .Where(chunk => !string.IsNullOrWhiteSpace(chunk))
+            .ToList();
+
         if (chunks.Count == 0)
         {
-            return;
+            chunks.Add("Done.");
         }
 
         await progress.ModifyAsync(properties => properties.Content = chunks[0]);

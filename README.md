@@ -33,7 +33,7 @@ Copy `appsettings.example.json` to `appsettings.json` or use environment variabl
   },
   "Agent": {
     "Command": "codex-acp",
-    "Arguments": [],
+    "Arguments": ["-c", "model=\"gpt-5.4\""],
     "WorkingDirectory": "."
   }
 }

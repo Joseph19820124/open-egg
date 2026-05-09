@@ -17,7 +17,7 @@ public sealed class AgentOptions
 {
     public string Command { get; set; } = "codex-acp";
 
-    public List<string> Arguments { get; set; } = [];
+    public List<string> Arguments { get; set; } = ["-c", "model=\"gpt-5.4\""];
 
     public string WorkingDirectory { get; set; } = ".";
 
